@@ -42,6 +42,7 @@ namespace bzn
         bzn::message do_leader_tasks(const bzn::message& msg);
 
         void leader_delete_task(const bzn::message &msg, bzn::message &response);
+        void handle_create_command(const bzn::message& msg, bzn::message& response);
 
         void handle_create(const bzn::message& msg);
         void handle_read(const bzn::message& msg, bzn::message& response);

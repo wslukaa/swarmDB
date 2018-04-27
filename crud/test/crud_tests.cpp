@@ -210,7 +210,9 @@ TEST_F(crud_test, test_that_a_leader_can_create_a_new_record)
 TEST_F(crud_test, test_that_a_leader_fails_to_create_an_existing_record)
 {
     // record exists, don't bother with raft
-    bzn::message request = generate_create_request(user_uuid, "key0", "skdif9ek34587fk30df6vm73==");
+    const std::string key{"key0"};
+    const std::string value{"skdif9ek34587fk30df6vm73=="};
+    bzn::message request = generate_create_request(user_uuid, key, value);
 
     bzn::message expected_response;
     expected_response["request-id"] = request["request-id"];
@@ -218,6 +220,10 @@ TEST_F(crud_test, test_that_a_leader_fails_to_create_an_existing_record)
     // This node is in the leader state.
     EXPECT_CALL(*this->mock_raft, get_state())
             .WillOnce(Invoke([](){return bzn::raft_state::leader;}));
+
+    // has(const bzn::uuid_t& uuid, const  std::string& key)
+    EXPECT_CALL(*this->mock_storage, has(user_uuid, key))
+            .WillOnce(Return(false));
 
     EXPECT_CALL(*this->mock_raft, append_log(_));
 
@@ -233,6 +239,24 @@ TEST_F(crud_test, test_that_a_leader_fails_to_create_an_existing_record)
     EXPECT_CALL(*this->mock_storage, error_msg(bzn::storage_base::result::exists));
 
     this->ch(request);
+
+    // OK. We've already done a create, now redo the same create
+
+    // This node is in the leader state.
+    EXPECT_CALL(*this->mock_raft, get_state())
+            .WillOnce(Invoke([](){return bzn::raft_state::leader;}));
+
+    // has(const bzn::uuid_t& uuid, const  std::string& key)
+    EXPECT_CALL(*this->mock_storage, has(user_uuid, key))
+            .WillOnce(Return(true));
+
+    expected_response.clear();
+    expected_response["error"] = bzn::MSG_RECORD_EXISTS;
+    expected_response["request-id"] = request["request-id"];
+
+    EXPECT_CALL(*this->mock_session, send_message(expected_response,_));
+
+    this->mh(request, this->mock_session);
 }
 
 TEST_F(crud_test, test_that_a_follower_can_read_an_existing_record)
