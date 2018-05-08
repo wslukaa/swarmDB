@@ -127,7 +127,6 @@ TEST_F(crud_test, test_that_follower_not_knowing_leader_fails_to_create)
 
     set_leader_info(expected_response, "", "", 0, "" );
 
-    // This node is in the follower state.
     EXPECT_CALL(*this->mock_raft, get_state())
             .WillOnce(Invoke([](){return bzn::raft_state::follower;}));
 
@@ -188,7 +187,6 @@ TEST_F(crud_test, test_that_a_leader_can_create_a_new_record)
     bzn::message expected_response;
     expected_response["request-id"] = request["request-id"];
 
-    // This node is in the follower state.
     EXPECT_CALL(*this->mock_raft, get_state())
             .WillOnce(Invoke([](){return bzn::raft_state::leader;}));
 
@@ -271,7 +269,6 @@ TEST_F(crud_test, test_that_a_follower_can_read_an_existing_record)
     expected_response["request-id"] = request["request-id"];
     expected_response["data"]["value"] = "skdif9ek34587fk30df6vm73==";
 
-    // This node is in the follower state.
     EXPECT_CALL(*this->mock_raft, get_state())
             .WillOnce(Invoke([](){return bzn::raft_state::follower;}));
 
@@ -347,7 +344,6 @@ TEST_F(crud_test, test_that_a_leader_can_read_existing_record)
     expected_response["request-id"] = request["request-id"];
     expected_response["data"]["value"] = "skdif9ek34587fk30df6vm73==";
 
-    // This node is in the follower state.
     EXPECT_CALL(*this->mock_raft, get_state())
             .WillOnce(Invoke([](){return bzn::raft_state::leader;}));
 
@@ -378,7 +374,6 @@ TEST_F(crud_test, test_that_a_follower_knowing_a_leader_attempting_update_fails)
 
     set_leader_info(accepted_response, leader_uuid, "127.0.0.1", 49152, "punkh" );
 
-    // This node is in the follower state.
     EXPECT_CALL(*this->mock_raft, get_state())
             .WillOnce(Invoke([](){return bzn::raft_state::follower;}));
 
@@ -400,7 +395,6 @@ TEST_F(crud_test, test_that_a_follower_not_knowing_leader_update_fails)
 
     set_leader_info(accepted_response, "", "", 0, "" );
 
-    // This node is in the follower state.
     EXPECT_CALL(*this->mock_raft, get_state())
             .WillOnce(Invoke([](){return bzn::raft_state::follower;}));
 
@@ -482,9 +476,6 @@ TEST_F(crud_test, test_that_a_leader_cannot_update_a_record_that_does_not_exist)
     this->mh(request, this->mock_session);
 }
 
-
-
-
 TEST_F(crud_test, test_that_a_follower_not_knowing_the_leader_delete_fails)
 {
     // must respond with error
@@ -519,7 +510,6 @@ TEST_F(crud_test, test_that_a_follower_knowing_the_leader_delete_fails)
 
     set_leader_info(expected_response, leader_uuid, "127.0.0.1", 49152, "Pantera" );
 
-    // This node is in the follower state.
     EXPECT_CALL(*this->mock_raft, get_state())
             .WillOnce(Invoke([](){return bzn::raft_state::follower;}));
 
@@ -849,4 +839,51 @@ TEST_F(crud_test, test_that_follower_can_return_the_size_of_a_database)
     EXPECT_CALL(*this->mock_session, send_message(accepted_response,_));
 
     this->mh(request, mock_session);
+}
+
+TEST_F(crud_test, test_that_a_create_fails_when_not_given_required_parameters)
+{
+    bzn::message request = generate_create_request(user_uuid, "key", "skdif9ek34587fk30df6vm73==");
+
+    bzn::message expected_response;
+    expected_response["request-id"] = request["request-id"];
+    expected_response["error"] = bzn::MSG_INVALID_CRUD_COMMAND;
+    bzn::raft_state raft_state = bzn::raft_state::leader;
+
+
+    request.removeMember("bzn-api");
+    EXPECT_CALL(*this->mock_session, send_message(expected_response,_));
+    this->mh(request, this->mock_session);
+    request["bzn-api"] = "crud";
+
+    request.removeMember("cmd");
+    EXPECT_CALL(*this->mock_session, send_message(expected_response,_));
+    this->mh(request, this->mock_session);
+    request["cmd"] = "create";
+
+    expected_response["error"] = bzn::MSG_INVALID_ARGUMENTS;
+
+    auto perform_test = [&](){
+        EXPECT_CALL(*this->mock_raft, get_state())
+                .WillOnce(Invoke([](){return bzn::raft_state::leader;}));
+
+        EXPECT_CALL(*this->mock_session, send_message(expected_response,_));
+
+        this->mh(request, this->mock_session);
+    };
+
+    request["data"].removeMember("key");
+    perform_test();
+    request["data"]["key"] = "key";
+
+    request["data"].removeMember("value");
+    perform_test();
+    request["data"]["value"] = "datavalue";
+
+    request.removeMember("db-uuid");
+    perform_test();
+    request["data"]["value"] = user_uuid;
+
+    request.removeMember("data");
+    perform_test();
 }
